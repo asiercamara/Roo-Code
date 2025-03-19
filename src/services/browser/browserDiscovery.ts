@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as os from "os"
 import * as net from "net"
-import axios from "axios"
+import axios from "../../utils/configuredAxios"
 
 /**
  * Check if a port is open on a given host

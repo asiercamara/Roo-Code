@@ -1,6 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk"
 import delay from "delay"
-import axios from "axios"
+import axios from "../../utils/configuredAxios"
 import EventEmitter from "events"
 import fs from "fs/promises"
 import os from "os"

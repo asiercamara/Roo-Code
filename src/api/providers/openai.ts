@@ -1,6 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI, { AzureOpenAI } from "openai"
-import axios from "axios"
+import axios from "../../utils/configuredAxios"
 
 import {
 	ApiHandlerOptions,

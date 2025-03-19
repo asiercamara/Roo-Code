@@ -1,5 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk"
-import axios from "axios"
+
+import axios from "../../utils/configuredAxios"
 import OpenAI from "openai"
 
 import { ApiHandlerOptions, ModelInfo, glamaDefaultModelId, glamaDefaultModelInfo } from "../../shared/api"

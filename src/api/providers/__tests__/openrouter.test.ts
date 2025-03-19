@@ -1,6 +1,6 @@
 // npx jest src/api/providers/__tests__/openrouter.test.ts
 
-import axios from "axios"
+import axios from "../../../utils/configuredAxios"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 

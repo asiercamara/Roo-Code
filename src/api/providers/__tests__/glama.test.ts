@@ -1,7 +1,7 @@
 // npx jest src/api/providers/__tests__/glama.test.ts
 
 import { Anthropic } from "@anthropic-ai/sdk"
-import axios from "axios"
+import axios from "../../../utils/configuredAxios"
 
 import { GlamaHandler } from "../glama"
 import { ApiHandlerOptions } from "../../../shared/api"

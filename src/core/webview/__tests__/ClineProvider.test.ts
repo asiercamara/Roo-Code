@@ -1,7 +1,7 @@
 // npx jest src/core/webview/__tests__/ClineProvider.test.ts
 
 import * as vscode from "vscode"
-import axios from "axios"
+import axios from "../../../utils/configuredAxios"
 
 import { ClineProvider } from "../ClineProvider"
 import { ExtensionMessage, ExtensionState } from "../../../shared/ExtensionMessage"

@@ -1,6 +1,7 @@
 import { Anthropic } from "@anthropic-ai/sdk"
 import { BetaThinkingConfigParam } from "@anthropic-ai/sdk/resources/beta"
-import axios, { AxiosRequestConfig } from "axios"
+//import axios, { AxiosRequestConfig } from "axios"
+import axios, { AxiosRequestConfig } from "../../utils/configuredAxios"
 import OpenAI from "openai"
 import delay from "delay"
 

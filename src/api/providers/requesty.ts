@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios from "../../utils/configuredAxios"
 
 import { ModelInfo, requestyModelInfoSaneDefaults, requestyDefaultModelId } from "../../shared/api"
 import { calculateApiCostOpenAI, parseApiPrice } from "../../utils/cost"
