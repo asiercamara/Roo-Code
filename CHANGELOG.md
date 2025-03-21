@@ -1,5 +1,32 @@
 # Roo Code Changelog
 
+## [3.10.1] - 2025-03-20
+
+- Make the suggested responses optional to not break overriden system prompts
+
+## [3.10.0] - 2025-03-20
+
+- Suggested responses to questions (thanks samhvw8!)
+- Support for reading large files in chunks (thanks samhvw8!)
+- More consistent @-mention lookups of files and folders
+- Consolidate code actions into a submenu (thanks samhvw8!)
+- Fix MCP error logging (thanks aheizi!)
+- Improvements to search_files tool formatting and logic (thanks KJ7LNW!)
+- Fix changelog formatting in GitHub Releases (thanks pdecat!)
+- Add fake provider for integration tests (thanks franekp!)
+- Reflect Cross-region inference option in ap-xx region (thanks Yoshino-Yukitaro!)
+- Fix bug that was causing task history to be lost when using WSL
+
+## [3.9.2] - 2025-03-19
+
+- Update GitHub Actions workflow to automatically create GitHub Releases (thanks @pdecat!)
+- Correctly persist the text-to-speech speed state (thanks @heyseth!)
+- Fixes to French translations (thanks @arthurauffray!)
+- Optimize build time for local development (thanks @KJ7LNW!)
+- VSCode theme fixes for select, dropdown and command components
+- Bring back the ability to manually enter a model name in the model picker
+- Fix internationalization of the announcement title and the browser
+
 ## [3.9.1] - 2025-03-18
 
 - Pass current language to system prompt correctly so Roo thinks and speaks in the selected language
