@@ -73,6 +73,7 @@ Diff format:
 
 \`\`\`
 
+
 Example:
 
 Original file:
@@ -128,6 +129,7 @@ def calculate_sum(items):
 >>>>>>> REPLACE
 \`\`\`
 
+
 Usage:
 <apply_diff>
 <path>File path here</path>
@@ -139,22 +141,177 @@ Only use a single line of '=======' between search and replacement content, beca
 </apply_diff>`
 	}
 
+	private unescapeMarkers(content: string): string {
+		return content
+			.replace(/^\\<<<<<<</gm, "<<<<<<<")
+			.replace(/^\\=======/gm, "=======")
+			.replace(/^\\>>>>>>>/gm, ">>>>>>>")
+			.replace(/^\\-------/gm, "-------")
+			.replace(/^\\:end_line:/gm, ":end_line:")
+			.replace(/^\\:start_line:/gm, ":start_line:")
+	}
+
+	private validateMarkerSequencing(diffContent: string): { success: boolean; error?: string } {
+		enum State {
+			START,
+			AFTER_SEARCH,
+			AFTER_SEPARATOR,
+		}
+		const state = { current: State.START, line: 0 }
+
+		const SEARCH = "<<<<<<< SEARCH"
+		const SEP = "======="
+		const REPLACE = ">>>>>>> REPLACE"
+		const SEARCH_PREFIX = "<<<<<<<"
+		const REPLACE_PREFIX = ">>>>>>>"
+
+		const reportMergeConflictError = (found: string, expected: string) => ({
+			success: false,
+			error:
+				`ERROR: Special marker '${found}' found in your diff content at line ${state.line}:\n` +
+				"\n" +
+				`When removing merge conflict markers like '${found}' from files, you MUST escape them\n` +
+				"in your SEARCH section by prepending a backslash (\\) at the beginning of the line:\n" +
+				"\n" +
+				"CORRECT FORMAT:\n\n" +
+				"<<<<<<< SEARCH\n" +
+				"content before\n" +
+				`\\${found}    <-- Note the backslash here in this example\n` +
+				"content after\n" +
+				"=======\n" +
+				"replacement content\n" +
+				">>>>>>> REPLACE\n" +
+				"\n" +
+				"Without escaping, the system confuses your content with diff syntax markers.\n" +
+				"You may use multiple diff blocks in a single diff request, but ANY of ONLY the following separators that occur within SEARCH or REPLACE content must be escaped, as follows:\n" +
+				`\\${SEARCH}\n` +
+				`\\${SEP}\n` +
+				`\\${REPLACE}\n`,
+		})
+
+		const reportInvalidDiffError = (found: string, expected: string) => ({
+			success: false,
+			error:
+				`ERROR: Diff block is malformed: marker '${found}' found in your diff content at line ${state.line}. Expected: ${expected}\n` +
+				"\n" +
+				"CORRECT FORMAT:\n\n" +
+				"<<<<<<< SEARCH\n" +
+				":start_line: (required) The line number of original content where the search block starts.\n" +
+				":end_line: (required) The line number of original content  where the search block ends.\n" +
+				"-------\n" +
+				"[exact content to find including whitespace]\n" +
+				"=======\n" +
+				"[new content to replace with]\n" +
+				">>>>>>> REPLACE\n",
+		})
+
+		const lines = diffContent.split("\n")
+		const searchCount = lines.filter((l) => l.trim() === SEARCH).length
+		const sepCount = lines.filter((l) => l.trim() === SEP).length
+		const replaceCount = lines.filter((l) => l.trim() === REPLACE).length
+
+		const likelyBadStructure = searchCount !== replaceCount || sepCount < searchCount
+
+		for (const line of diffContent.split("\n")) {
+			state.line++
+			const marker = line.trim()
+
+			switch (state.current) {
+				case State.START:
+					if (marker === SEP)
+						return likelyBadStructure
+							? reportInvalidDiffError(SEP, SEARCH)
+							: reportMergeConflictError(SEP, SEARCH)
+					if (marker === REPLACE) return reportInvalidDiffError(REPLACE, SEARCH)
+					if (marker.startsWith(REPLACE_PREFIX)) return reportMergeConflictError(marker, SEARCH)
+					if (marker === SEARCH) state.current = State.AFTER_SEARCH
+					else if (marker.startsWith(SEARCH_PREFIX)) return reportMergeConflictError(marker, SEARCH)
+					break
+
+				case State.AFTER_SEARCH:
+					if (marker === SEARCH) return reportInvalidDiffError(SEARCH, SEP)
+					if (marker.startsWith(SEARCH_PREFIX)) return reportMergeConflictError(marker, SEARCH)
+					if (marker === REPLACE) return reportInvalidDiffError(REPLACE, SEP)
+					if (marker.startsWith(REPLACE_PREFIX)) return reportMergeConflictError(marker, SEARCH)
+					if (marker === SEP) state.current = State.AFTER_SEPARATOR
+					break
+
+				case State.AFTER_SEPARATOR:
+					if (marker === SEARCH) return reportInvalidDiffError(SEARCH, REPLACE)
+					if (marker.startsWith(SEARCH_PREFIX)) return reportMergeConflictError(marker, REPLACE)
+					if (marker === SEP)
+						return likelyBadStructure
+							? reportInvalidDiffError(SEP, REPLACE)
+							: reportMergeConflictError(SEP, REPLACE)
+					if (marker === REPLACE) state.current = State.START
+					else if (marker.startsWith(REPLACE_PREFIX)) return reportMergeConflictError(marker, REPLACE)
+					break
+			}
+		}
+
+		return state.current === State.START
+			? { success: true }
+			: {
+					success: false,
+					error: `ERROR: Unexpected end of sequence: Expected '${state.current === State.AFTER_SEARCH ? SEP : REPLACE}' was not found.`,
+				}
+	}
+
 	async applyDiff(
 		originalContent: string,
 		diffContent: string,
 		_paramStartLine?: number,
 		_paramEndLine?: number,
 	): Promise<DiffResult> {
+		const validseq = this.validateMarkerSequencing(diffContent)
+		if (!validseq.success) {
+			return {
+				success: false,
+				error: validseq.error!,
+			}
+		}
+
+		/*
+			Regex parts:
+			
+			1. (?:^|\n)  
+			  Ensures the first marker starts at the beginning of the file or right after a newline.
+
+			2. (?<!\\)<<<<<<< SEARCH\s*\n  
+			  Matches the line “<<<<<<< SEARCH” (ignoring any trailing spaces) – the negative lookbehind makes sure it isn’t escaped.
+
+			3. ((?:\:start_line:\s*(\d+)\s*\n))?  
+			  Optionally matches a “:start_line:” line. The outer capturing group is group 1 and the inner (\d+) is group 2.
+
+			4. ((?:\:end_line:\s*(\d+)\s*\n))?  
+			  Optionally matches a “:end_line:” line. Group 3 is the whole match and group 4 is the digits.
+
+			5. ((?<!\\)-------\s*\n)?  
+			  Optionally matches the “-------” marker line (group 5).
+
+			6. ([\s\S]*?)(?:\n)?  
+			  Non‐greedy match for the “search content” (group 6) up to the next marker.
+
+			7. (?:(?<=\n)(?<!\\)=======\s*\n)  
+			  Matches the “=======” marker on its own line.
+
+			8. ([\s\S]*?)(?:\n)?  
+			  Non‐greedy match for the “replace content” (group 7).
+
+			9. (?:(?<=\n)(?<!\\)>>>>>>> REPLACE)(?=\n|$)  
+			  Matches the final “>>>>>>> REPLACE” marker on its own line (and requires a following newline or the end of file).
+		*/
+
 		let matches = [
 			...diffContent.matchAll(
-				/<<<<<<< SEARCH\n(:start_line:\s*(\d+)\n){0,1}(:end_line:\s*(\d+)\n){0,1}(-------\n){0,1}([\s\S]*?)\n?=======\n([\s\S]*?)\n?>>>>>>> REPLACE/g,
+				/(?:^|\n)(?<!\\)<<<<<<< SEARCH\s*\n((?:\:start_line:\s*(\d+)\s*\n))?((?:\:end_line:\s*(\d+)\s*\n))?((?<!\\)-------\s*\n)?([\s\S]*?)(?:\n)?(?:(?<=\n)(?<!\\)=======\s*\n)([\s\S]*?)(?:\n)?(?:(?<=\n)(?<!\\)>>>>>>> REPLACE)(?=\n|$)/g,
 			),
 		]
 
 		if (matches.length === 0) {
 			return {
 				success: false,
-				error: `Invalid diff format - missing required sections\n\nDebug Info:\n- Expected Format: <<<<<<< SEARCH\\n:start_line: start line\\n:end_line: end line\\n-------\\n[search content]\\n=======\\n[replace content]\\n>>>>>>> REPLACE\n- Tip: Make sure to include start_line/end_line/SEARCH/REPLACE sections with correct markers`,
+				error: `Invalid diff format - missing required sections\n\nDebug Info:\n- Expected Format: <<<<<<< SEARCH\\n:start_line: start line\\n:end_line: end line\\n-------\\n[search content]\\n=======\\n[replace content]\\n>>>>>>> REPLACE\n- Tip: Make sure to include start_line/end_line/SEARCH/=======/REPLACE sections with correct markers on new lines`,
 			}
 		}
 		// Detect line ending from original content
@@ -176,10 +333,30 @@ Only use a single line of '=======' between search and replacement content, beca
 			startLine += startLine === 0 ? 0 : delta
 			endLine += delta
 
+			// First unescape any escaped markers in the content
+			searchContent = this.unescapeMarkers(searchContent)
+			replaceContent = this.unescapeMarkers(replaceContent)
+
 			// Strip line numbers from search and replace content if every line starts with a line number
-			if (everyLineHasLineNumbers(searchContent) && everyLineHasLineNumbers(replaceContent)) {
+			if (
+				(everyLineHasLineNumbers(searchContent) && everyLineHasLineNumbers(replaceContent)) ||
+				(everyLineHasLineNumbers(searchContent) && replaceContent.trim() === "")
+			) {
 				searchContent = stripLineNumbers(searchContent)
 				replaceContent = stripLineNumbers(replaceContent)
+			}
+
+			// Validate that search and replace content are not identical
+			if (searchContent === replaceContent) {
+				diffResults.push({
+					success: false,
+					error:
+						`Search and replace content are identical - no changes would be made\n\n` +
+						`Debug Info:\n` +
+						`- Search and replace must be different to make changes\n` +
+						`- Use read_file to verify the content you want to change`,
+				})
+				continue
 			}
 
 			// Split content into lines, handling both \n and \r\n
@@ -303,7 +480,7 @@ Only use a single line of '=======' between search and replacement content, beca
 
 				diffResults.push({
 					success: false,
-					error: `No sufficiently similar match found${lineRange} (${Math.floor(bestMatchScore * 100)}% similar, needs ${Math.floor(this.fuzzyThreshold * 100)}%)\n\nDebug Info:\n- Similarity Score: ${Math.floor(bestMatchScore * 100)}%\n- Required Threshold: ${Math.floor(this.fuzzyThreshold * 100)}%\n- Search Range: ${startLine && endLine ? `lines ${startLine}-${endLine}` : "start to end"}\n- Tip: Use read_file to get the latest content of the file before attempting the diff again, as the file content may have changed\n\nSearch Content:\n${searchChunk}${bestMatchSection}${originalContentSection}`,
+					error: `No sufficiently similar match found${lineRange} (${Math.floor(bestMatchScore * 100)}% similar, needs ${Math.floor(this.fuzzyThreshold * 100)}%)\n\nDebug Info:\n- Similarity Score: ${Math.floor(bestMatchScore * 100)}%\n- Required Threshold: ${Math.floor(this.fuzzyThreshold * 100)}%\n- Search Range: ${startLine && endLine ? `lines ${startLine}-${endLine}` : "start to end"}\n- Tip: Use the read_file tool to get the latest content of the file before attempting to use the apply_diff tool again, as the file content may have changed\n\nSearch Content:\n${searchChunk}${bestMatchSection}${originalContentSection}`,
 				})
 				continue
 			}

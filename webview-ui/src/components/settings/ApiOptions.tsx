@@ -1,13 +1,12 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react"
 import { useAppTranslation } from "@/i18n/TranslationContext"
 import { Trans } from "react-i18next"
+import { getRequestyAuthUrl, getOpenRouterAuthUrl, getGlamaAuthUrl } from "../../oauth/urls"
 import { useDebounce, useEvent } from "react-use"
 import { LanguageModelChatSelector } from "vscode"
 import { Checkbox } from "vscrui"
 import { VSCodeLink, VSCodeRadio, VSCodeRadioGroup, VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 import { ExternalLinkIcon } from "@radix-ui/react-icons"
-
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator, Button } from "@/components/ui"
 
 import {
 	ApiConfiguration,
@@ -41,19 +40,23 @@ import {
 import { ExtensionMessage } from "../../../../src/shared/ExtensionMessage"
 
 import { vscode } from "@/utils/vscode"
+import { validateApiConfiguration, validateModelId, validateBedrockArn } from "@/utils/validate"
 import {
 	useOpenRouterModelProviders,
 	OPENROUTER_DEFAULT_PROVIDER_NAME,
 } from "@/components/ui/hooks/useOpenRouterModelProviders"
-
-import { MODELS_BY_PROVIDER, PROVIDERS, AWS_REGIONS, VERTEX_REGIONS } from "./constants"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator, Button } from "@/components/ui"
+import { MODELS_BY_PROVIDER, PROVIDERS, VERTEX_REGIONS } from "./constants"
+import { AWS_REGIONS } from "../../../../src/shared/aws_regions"
 import { VSCodeButtonLink } from "../common/VSCodeButtonLink"
 import { ModelInfoView } from "./ModelInfoView"
 import { ModelPicker } from "./ModelPicker"
 import { TemperatureControl } from "./TemperatureControl"
-import { validateApiConfiguration, validateModelId, validateBedrockArn } from "@/utils/validate"
 import { ApiErrorMessage } from "./ApiErrorMessage"
 import { ThinkingBudget } from "./ThinkingBudget"
+import { R1FormatSetting } from "./R1FormatSetting"
+import { OpenRouterBalanceDisplay } from "./OpenRouterBalanceDisplay"
+import { RequestyBalanceDisplay } from "./RequestyBalanceDisplay"
 
 interface ApiOptionsProps {
 	uriScheme: string | undefined
@@ -103,7 +106,6 @@ const ApiOptions = ({
 		!!apiConfiguration?.googleGeminiBaseUrl,
 	)
 	const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
-
 	const noTransform = <T,>(value: T) => value
 
 	const inputEventTransform = <E,>(event: E) => (event as { target: HTMLInputElement })?.target?.value as any
@@ -241,10 +243,55 @@ const ApiOptions = ({
 		[selectedProvider],
 	)
 
+	// Base URL for provider documentation
+	const DOC_BASE_URL = "https://docs.roocode.com/providers"
+
+	// Custom URL path mappings for providers with different slugs
+	const providerUrlSlugs: Record<string, string> = {
+		"openai-native": "openai",
+		openai: "openai-compatible",
+	}
+
+	// Helper function to get provider display name from PROVIDERS constant
+	const getProviderDisplayName = (providerKey: string): string | undefined => {
+		const provider = PROVIDERS.find((p) => p.value === providerKey)
+		return provider?.label
+	}
+
+	// Helper function to get the documentation URL and name for the currently selected provider
+	const getSelectedProviderDocUrl = (): { url: string; name: string } | undefined => {
+		const displayName = getProviderDisplayName(selectedProvider)
+		if (!displayName) {
+			return undefined
+		}
+
+		// Get the URL slug - use custom mapping if available, otherwise use the provider key
+		const urlSlug = providerUrlSlugs[selectedProvider] || selectedProvider
+
+		return {
+			url: `${DOC_BASE_URL}/${urlSlug}`,
+			name: displayName,
+		}
+	}
+
 	return (
 		<div className="flex flex-col gap-3">
-			<div>
-				<label className="block font-medium mb-1">{t("settings:providers.apiProvider")}</label>
+			<div className="flex flex-col gap-1 relative">
+				<div className="flex justify-between items-center">
+					<label className="block font-medium mb-1">{t("settings:providers.apiProvider")}</label>
+					{getSelectedProviderDocUrl() && (
+						<div className="text-xs text-vscode-descriptionForeground">
+							<VSCodeLink
+								href={getSelectedProviderDocUrl()!.url}
+								className="hover:text-vscode-foreground"
+								target="_blank">
+								{t("settings:providers.providerDocumentation", {
+									provider: getSelectedProviderDocUrl()!.name,
+								})}
+							</VSCodeLink>
+						</div>
+					)}
+				</div>
 				<Select
 					value={selectedProvider}
 					onValueChange={(value) => setApiConfigurationField("apiProvider", value as ApiProvider)}>
@@ -254,7 +301,7 @@ const ApiOptions = ({
 					<SelectContent>
 						<SelectItem value="openrouter">OpenRouter</SelectItem>
 						<SelectSeparator />
-						{PROVIDERS.map(({ value, label }) => (
+						{PROVIDERS.filter((p) => p.value !== "openrouter").map(({ value, label }) => (
 							<SelectItem key={value} value={value}>
 								{label}
 							</SelectItem>
@@ -273,13 +320,24 @@ const ApiOptions = ({
 						onInput={handleInputChange("openRouterApiKey")}
 						placeholder={t("settings:placeholders.apiKey")}
 						className="w-full">
-						<label className="block font-medium mb-1">{t("settings:providers.openRouterApiKey")}</label>
+						<div className="flex justify-between items-center mb-1">
+							<label className="block font-medium">{t("settings:providers.openRouterApiKey")}</label>
+							{apiConfiguration?.openRouterApiKey && (
+								<OpenRouterBalanceDisplay
+									apiKey={apiConfiguration.openRouterApiKey}
+									baseUrl={apiConfiguration.openRouterBaseUrl}
+								/>
+							)}
+						</div>
 					</VSCodeTextField>
 					<div className="text-sm text-vscode-descriptionForeground -mt-2">
 						{t("settings:providers.apiKeyStorageNotice")}
 					</div>
 					{!apiConfiguration?.openRouterApiKey && (
-						<VSCodeButtonLink href={getOpenRouterAuthUrl(uriScheme)} appearance="secondary">
+						<VSCodeButtonLink
+							href={getOpenRouterAuthUrl(uriScheme)}
+							style={{ width: "100%" }}
+							appearance="primary">
 							{t("settings:providers.getOpenRouterApiKey")}
 						</VSCodeButtonLink>
 					)}
@@ -380,7 +438,10 @@ const ApiOptions = ({
 						{t("settings:providers.apiKeyStorageNotice")}
 					</div>
 					{!apiConfiguration?.glamaApiKey && (
-						<VSCodeButtonLink href={getGlamaAuthUrl(uriScheme)} appearance="secondary">
+						<VSCodeButtonLink
+							href={getGlamaAuthUrl(uriScheme)}
+							style={{ width: "100%" }}
+							appearance="primary">
 							{t("settings:providers.getGlamaApiKey")}
 						</VSCodeButtonLink>
 					)}
@@ -395,11 +456,24 @@ const ApiOptions = ({
 						onInput={handleInputChange("requestyApiKey")}
 						placeholder={t("settings:providers.getRequestyApiKey")}
 						className="w-full">
-						<label className="block font-medium mb-1">{t("settings:providers.requestyApiKey")}</label>
+						<div className="flex justify-between items-center mb-1">
+							<label className="block font-medium">{t("settings:providers.requestyApiKey")}</label>
+							{apiConfiguration?.requestyApiKey && (
+								<RequestyBalanceDisplay apiKey={apiConfiguration.requestyApiKey} />
+							)}
+						</div>
 					</VSCodeTextField>
 					<div className="text-sm text-vscode-descriptionForeground -mt-2">
 						{t("settings:providers.apiKeyStorageNotice")}
 					</div>
+					{!apiConfiguration?.requestyApiKey && (
+						<VSCodeButtonLink
+							href={getRequestyAuthUrl(uriScheme)}
+							style={{ width: "100%" }}
+							appearance="primary">
+							{t("settings:providers.getRequestyApiKey")}
+						</VSCodeButtonLink>
+					)}
 				</>
 			)}
 
@@ -537,6 +611,25 @@ const ApiOptions = ({
 						onChange={handleInputChange("awsUseCrossRegionInference", noTransform)}>
 						{t("settings:providers.awsCrossRegion")}
 					</Checkbox>
+					{selectedModelInfo?.supportsPromptCache && (
+						<Checkbox
+							checked={apiConfiguration?.awsUsePromptCache || false}
+							onChange={handleInputChange("awsUsePromptCache", noTransform)}>
+							<div className="flex items-center gap-1">
+								<span>{t("settings:providers.enablePromptCaching")}</span>
+								<i
+									className="codicon codicon-info text-vscode-descriptionForeground"
+									title={t("settings:providers.enablePromptCachingTitle")}
+									style={{ fontSize: "12px" }}
+								/>
+							</div>
+						</Checkbox>
+					)}
+					<div>
+						<div className="text-sm text-vscode-descriptionForeground ml-6 mt-1">
+							{t("settings:providers.cacheUsageNote")}
+						</div>
+					</div>
 				</>
 			)}
 
@@ -680,6 +773,10 @@ const ApiOptions = ({
 						modelInfoKey="openAiCustomModelInfo"
 						serviceName="OpenAI"
 						serviceUrl="https://platform.openai.com"
+					/>
+					<R1FormatSetting
+						onChange={handleInputChange("openAiR1FormatEnabled", noTransform)}
+						openAiR1FormatEnabled={apiConfiguration?.openAiR1FormatEnabled ?? false}
 					/>
 					<Checkbox
 						checked={apiConfiguration?.openAiStreamingEnabled ?? true}
@@ -1472,7 +1569,7 @@ const ApiOptions = ({
 								{t("settings:providers.awsCustomArnUse")}
 								<ul className="list-disc pl-5 mt-1">
 									<li>
-										arn:aws:bedrock:us-east-1:123456789012:foundation-model/anthropic.claude-3-sonnet-20240229-v1:0
+										arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0
 									</li>
 									<li>
 										arn:aws:bedrock:us-west-2:123456789012:provisioned-model/my-provisioned-model
@@ -1534,15 +1631,6 @@ const ApiOptions = ({
 			)}
 		</div>
 	)
-}
-
-export function getGlamaAuthUrl(uriScheme?: string) {
-	const callbackUrl = `${uriScheme || "vscode"}://rooveterinaryinc.roo-cline/glama`
-	return `https://glama.ai/oauth/authorize?callback_url=${encodeURIComponent(callbackUrl)}`
-}
-
-export function getOpenRouterAuthUrl(uriScheme?: string) {
-	return `https://openrouter.ai/auth?callback_url=${uriScheme || "vscode"}://rooveterinaryinc.roo-cline/openrouter`
 }
 
 export function normalizeApiConfiguration(apiConfiguration?: ApiConfiguration) {

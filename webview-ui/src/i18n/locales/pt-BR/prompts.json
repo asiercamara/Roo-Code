@@ -36,12 +36,12 @@
 		"title": "Instruções personalizadas específicas do modo (opcional)",
 		"resetToDefault": "Restaurar para padrão",
 		"description": "Adicione diretrizes comportamentais específicas para o modo {{modeName}}.",
-		"loadFromFile": "Instruções personalizadas específicas para o modo {{modeName}} também podem ser carregadas de .clinerules-{{modeSlug}} no seu espaço de trabalho."
+		"loadFromFile": "Instruções personalizadas específicas para o modo {{modeName}} também podem ser carregadas de <span>.roorules-{{modeSlug}}</span> no seu espaço de trabalho (.clinerules-{{modeSlug}} está obsoleto e deixará de funcionar em breve)."
 	},
 	"globalCustomInstructions": {
 		"title": "Instruções personalizadas para todos os modos",
 		"description": "Estas instruções se aplicam a todos os modos. Elas fornecem um conjunto base de comportamentos que podem ser aprimorados por instruções específicas do modo abaixo.\nSe você desejar que o Roo pense e fale em um idioma diferente do idioma de exibição do seu editor ({{language}}), você pode especificá-lo aqui.",
-		"loadFromFile": "As instruções também podem ser carregadas de .clinerules no seu espaço de trabalho."
+		"loadFromFile": "As instruções também podem ser carregadas de <span>.roorules</span> no seu espaço de trabalho (.clinerules está obsoleto e deixará de funcionar em breve)."
 	},
 	"systemPrompt": {
 		"preview": "Visualizar prompt do sistema",
@@ -91,12 +91,12 @@
 			"TERMINAL_EXPLAIN": {
 				"label": "Explicar Comando do Terminal",
 				"description": "Obtenha explicações detalhadas de comandos de terminal e suas saídas. Available in the terminal context menu (right-click on selected terminal content)."
+			},
+			"NEW_TASK": {
+				"label": "Iniciar Nova Tarefa",
+				"description": "Inicie uma nova tarefa com a entrada fornecida. Disponível na paleta de comandos."
 			}
 		}
-	},
-	"customModeCreation": {
-		"enableTitle": "Ativar criação de modo personalizado através de prompts",
-		"description": "Quando ativado, o Roo permite que você crie modos personalizados usando prompts como 'Crie para mim um modo personalizado que...'. Desativar isto reduz seu prompt de sistema em cerca de 700 tokens quando esta funcionalidade não é necessária. Quando desativado, você ainda pode criar modos personalizados manualmente usando o botão + acima ou editando o JSON de configuração relacionado."
 	},
 	"advancedSystemPrompt": {
 		"title": "Avançado: Substituir prompt do sistema",
